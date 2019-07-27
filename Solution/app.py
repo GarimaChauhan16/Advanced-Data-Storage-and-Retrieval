@@ -1,85 +1,88 @@
-import numpy as np
-
-import sqlalchemy
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.orm import Session
-from sqlalchemy import create_engine, func
+from sqlalchemy import create_engine
 
 from flask import Flask, jsonify
+import numpy as np
+import pandas as pd
 
-
-#################################################
 # Database Setup
-#################################################
 database_path = "../Resources/hawaii.sqlite"
 engine = create_engine(f"sqlite:///{database_path}")
 
-# reflect an existing database into a new model
+# Reflect an existing database into a new model
 Base = automap_base()
-# reflect the tables
+
+# Reflect the tables
 Base.prepare(engine, reflect=True)
 
+#print(Base.classes.keys())
+
 # Save reference to the table
-Measurement = Base.classes.measurement
 Station = Base.classes.station
+Measurement = Base.classes.measurement
 
-# Create our session (link) from Python to the DB
-
-
-#################################################
-# Flask Setup
-#################################################
+# Define a session
+session = Session(engine)
 app = Flask(__name__)
 
-
-#################################################
 # Flask Routes
-#################################################
 
 @app.route("/")
 def welcome():
-    """List all available api routes."""
-    return (
-        f"Available Routes:<br/>"
-        f"/api/v1.0/precipitation<br/>"
-        f"/api/v1.0/stations<br/>"
-        f"/api/v1.0/tobs<br/>"
-        f"/api/v1.0/<start><br/>"
-        f"/api/v1.0/<start>/<end>"
-    )
-
+    """List all routes that are available."""
+    return ("List of Available Routes:<br/> \
+            /api/v1.0/precipitation<br/> \
+            /api/v1.0/stations<br/> \
+            /api/v1.0/tobs<br/> \
+            /api/v1.0/start<br/> \
+            /api/v1.0/start/end")
 
 @app.route("/api/v1.0/precipitation")
-def precipitation():
-    """Return a list of all passenger names"""
-    # Query all passengers
-    session = Session(engine)
-    results = session.query(Measurement.date, Measurement.prcp).all()
+def dates():
+    """ Return a list of all dates and temperature observations
+    """
+    # Query all dates and temperature observations for last year
+    one_year_prcp = session.query(Measurement.date, Measurement.prcp).\
+            filter(Measurement.date.between('2016-08-23', '2017-08-23')).\
+            group_by(Measurement.date).order_by(Measurement.date).all()
+
+    #Convert query results to dictionary
+    prcp_data = []
+    for prcp in one_year_prcp:
+        prcp_dict = {}
+        prcp_dict["date"] = prcp.date
+        prcp_dict["prcp"] = prcp.prcp
+        prcp_data.append(prcp_dict)
 
     # Convert list of tuples into normal list
-    # all_names = list(np.ravel(results))
-    all_data = [data[0] for data in results]
+    return jsonify(prcp_data)
 
-    return jsonify(all_data)
+@app.route("/api/v1.0/stations")
+def stations():
+    station_results = session.query(Measurement.station).\
+                      filter(Measurement.date.between('2016-08-23', '2017-08-23')).all()
+                      
+    all_stations = []
+    for station in station_results:
+        station_dict = {}
+        station_dict["station"]=station.station
+        all_stations.append(station_dict)
 
+    return jsonify(all_stations)
 
-# @app.route("/api/v1.0/passengers")
-# def passengers():
-#     """Return a list of passenger data including the name, age, and sex of each passenger"""
-#     # Query all passengers
-#     session = Session(engine)
-#     results = session.query(Passenger.name, Passenger.age, Passenger.sex).all()
+@app.route("/api/v1.0/tobs")
+def tobs():
+    one_year_tobs = session.query(Measurement.tobs).\
+                    filter(Measurement.date.between('2016-08-23', '2017-08-23')).all()
+                      
+    tobs_data = []
+    for tob in one_year_tobs:
+        tob_dict = {}
+        tob_dict["Temp. Observations"]= tob.tobs
+        tobs_data.append(tob_dict)
 
-#     # Create a dictionary from the row data and append to a list of all_passengers
-#     all_passengers = []
-#     for name, age, sex in results:
-#         passenger_dict = {}
-#         passenger_dict["name"] = name
-#         passenger_dict["age"] = age
-#         passenger_dict["sex"] = sex
-#         all_passengers.append(passenger_dict)
+    return jsonify(tobs_data)
 
-#     return jsonify(all_passengers)
-
-# if __name__ == '__main__':
-#     app.run(debug=True)
+if __name__ == "__main__":
+    app.run(debug=True)
